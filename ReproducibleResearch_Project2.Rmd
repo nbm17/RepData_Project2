@@ -1,0 +1,22 @@
+---
+title: "Analysis of the Impact of Weather Events on Economics and Health"
+author: "Nate Mosley"
+date: "March 22, 2017"
+output: html_document
+---
+##Synopisis
+####of the data analysis should go here.  This should be no more than 10 sentences.
+
+
+##Data Processing
+*Check if file exists, if not download the file into the working directory
+*Followed by a command to import the file into R
+```{r, echo=TRUE, cache=TRUE}
+tempfile <-"repdata%2Fdata%2FStormData.csv.bz2"
+    if(!file.exists(tempfile)){
+      fileUrl <- "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2"  
+      download.file(fileUrl,tempfile)  
+    }
+
+df<-read.csv(tempfile)
+```
