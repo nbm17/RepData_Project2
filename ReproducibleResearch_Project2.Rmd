@@ -1,22 +1,86 @@
----
-title: "Analysis of the Impact of Weather Events on Economics and Health"
-author: "Nate Mosley"
-date: "March 22, 2017"
-output: html_document
----
-##Synopisis
-####of the data analysis should go here.  This should be no more than 10 sentences.
+#Analysis of the Impact of Weather Events on Economics and Health  
+
+##Synopisis  
+#####The National Oceanic and Atmospheric Association has been collecting data on the economic and health impacts of weather events for many years.  This analysis attempts to quantify the most impactful events in terms of four metrics.  These include two for health(fatalities and injuries) as well as two for economic (crop and property). The tornado event type shows up in the top 2 in terms of both fatalities and injuries.  The flood event type had the most economic impact when both crop and property damage is combined.
 
 
 ##Data Processing
-*Check if file exists, if not download the file into the working directory
-*Followed by a command to import the file into R
+#####The data used for this analysis required some steps to be cleaned prior to use.  This included subsetting the data to a time frame after which the NOAA began collecting multiple event types.  Additionally, the data in it's current form kept the scale of the values in two separate columns.  Techniques were used to merge this into a single useful field.  The criteria for this assignment limited the number of possible figures to only three. I interpreted this to mean that the economic impact data should be combined into a single field.  The code for all of these steps is outlined below.    
+[Explanation of PROPDMGEXP and CROPDMGEXP](https://rstudio-pubs-static.s3.amazonaws.com/58957_37b6723ee52b455990e149edde45e5b6.html)  
+[Decision to subset after 1996 is located here](https://www.coursera.org/learn/reproducible-research/discussions/weeks/4/threads/IdtP_JHzEeaePQ71AQUtYw?sort=createdAtAsc&page=1)
 ```{r, echo=TRUE, cache=TRUE}
+
+#Check if file exists, if not download the file into the working directory
 tempfile <-"repdata%2Fdata%2FStormData.csv.bz2"
     if(!file.exists(tempfile)){
       fileUrl <- "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2"  
       download.file(fileUrl,tempfile)  
     }
 
-df<-read.csv(tempfile)
+#Import the file into R
+  df<-read.csv(tempfile)
+    ##Tried to use fread, but fails on "EOF at the end"
+    #Appears to be unable to read the bz2 file type.
+    #library(data.table)
+    #df<-fread(tempfile, sep=",")
+
+#Convert the event beginning date into a date format
+  df$BGN_DATE<-as.Date(as.character(df$BGN_DATE),"%m/%d/%Y")
+#Subset the data to the relevant time frame per project forum guideline
+  df<-df[df$BGN_DATE>=as.Date("1996-01-01"),]
+#Subset to relevant columns
+  mycol<-c("BGN_DATE","EVTYPE","FATALITIES","INJURIES","PROPDMG","PROPDMGEXP","CROPDMG","CROPDMGEXP")
+  df<-df[mycol]
+#Scrub the Exponent columns into something useful
+  df$PROPEXPNUM<-rep(0,nrow(df))
+  df$PROPEXPNUM[df$PROPDMGEXP %in%c("0","1","2","3","4","5","6","7","8")]<-1
+  df$PROPEXPNUM[df$PROPDMGEXP =="B"]<-9
+  df$PROPEXPNUM[df$PROPDMGEXP %in% c("h","H")]<-2
+  df$PROPEXPNUM[df$PROPDMGEXP =="K"]<-3
+  df$PROPEXPNUM[df$PROPDMGEXP %in% c("m","M")]<-6
+  df$PROPDMG<-df$PROPDMG*10^df$PROPEXPNUM
+  df$CROPEXPNUM<-rep(0,nrow(df))
+  df$CROPEXPNUM[df$CROPDMGEXP %in%c("0","1","2","3","4","5","6","7","8")]<-1
+  df$CROPEXPNUM[df$CROPDMGEXP =="B"]<-9
+  df$CROPEXPNUM[df$CROPDMGEXP %in% c("k","K")]<-3
+  df$CROPEXPNUM[df$CROPDMGEXP %in% c("m","M")]<-6
+  df$CROPDMG<-df$CROPDMG*10^df$CROPEXPNUM
+#Merge economic data so a single figure is possible
+  df_econ<-rbind(df[,c(2,5)],setNames(df[,c(2,7)],c("EVTYPE","PROPDMG")))
+  colnames(df_econ)<-c("EVTYPE","ECONDMG")
+#How to handle the dirty EVTYPES?  
+```
+
+##Results
+###Which types of events are most harmful to population health?
+#####As you can see in the figure below, there are differences in impact depending on the measurement type.  It is interesting the the Tornado type appears in the top 2 in both measurement types.
+```{r, echo=TRUE}
+library(ggplot2)
+library(grid)
+library(gridExtra)
+#begin by aggregating human impact data by fatalities
+#limit to top 10 event types
+agg_fatal<-aggregate(df$FATALITIES, by=list(df$EVTYPE),FUN=sum)
+agg_fatal<-agg_fatal[order(-agg_fatal$x),][1:10,]
+plot1<-ggplot(agg_fatal,aes(x=reorder(Group.1,-x), y=x))+geom_bar(stat="identity", fill="blue")+theme(axis.text.x = element_text(angle=45,hjust=1,vjust=1))+xlab("Event")+ylab("Magnitude")+ggtitle("Population Impact Measured by Fatalities")
+#Repeat steps for Injuries
+agg_inj<-aggregate(df$INJURIES, by=list(df$EVTYPE),FUN=sum)
+agg_inj<-agg_inj[order(-agg_inj$x),][1:10,]
+plot2<-ggplot(agg_inj,aes(x=reorder(Group.1,-x), y=x))+geom_bar(stat="identity", fill="blue")+theme(axis.text.x = element_text(angle=45,hjust=1,vjust=1))+xlab("Event")+ylab("Magnitude")+ggtitle("Population Impact Measured by Injuries")
+#Create a single plot to compare both measurements
+grid.arrange(plot1,plot2, ncol=1)
+```
+
+###Which types of events have the greatest economic impact measured by crop and property damage?
+```{r, echo=TRUE}
+library(ggplot2)
+library(grid)
+library(gridExtra)
+#begin by aggregating economic impact data for crops
+#limit to top 10 event types
+agg_crop<-aggregate(df_econ$ECONDMG, by=list(df_econ$EVTYPE),FUN=sum)
+agg_crop<-agg_crop[order(-agg_crop$x),][1:10,]
+plot3<-ggplot(agg_crop,aes(x=reorder(Group.1,-x), y=x))+geom_bar(stat="identity", fill="blue")+theme(axis.text.x = element_text(angle=45,hjust=1,vjust=1))+xlab("Event")+ylab("Magnitude")+ggtitle("Economic Impact Measured by All Economic Damage")
+#Create a single plot to compare both measurements
+grid.arrange(plot3, ncol=1)
 ```
